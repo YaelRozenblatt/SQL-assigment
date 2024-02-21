@@ -1,0 +1,138 @@
+---
+title: "SQL task- Yael"
+format: html
+self-contained: true
+toc: true
+---
+
+```{r}
+#| warning: false
+library(DBI)
+library(dplyr)
+library(dbplyr)
+library(odbc)
+con_chocolate <- DBI::dbConnect(drv = RSQLite::SQLite(),
+dbname = "chocolate.sqlite")
+
+```
+
+# Q1
+
+1.  The client wanted to know who is the customer who made the highest total orders after January 1, 2023.
+
+• The first part of the code defines the table: total_orders.
+
+• It selects the customer ID (cid) and calculates the sum of the total price of all orders (SUM(Price \* amount)) from a table called orders to a column named sum_total, for each customer (GROUP BY cid).
+
+• It performs a left join with the products table using the pid column (the candy bar’s identification).
+
+• Then, the data is filtered to include only orders made after January 1, 2023 (WHERE (sale_date \> '2023-01-01').
+
+• The second part of the code selects all columns from the total_orders table.
+
+• It then performs a left join with the customers table using the cid column to join.
+
+• The result is ordered by the sum of total orders (sum_total) in descending order (ORDER BY sum_total DESC).
+
+• Finally, it limits the output to the first row (LIMIT 1), which effectively selects the customer with the highest total orders made after January 1, 2023.
+
+2.  
+
+```{sql, connection = con_chocolate, output.var = "Q1"}
+WITH total_orders AS (
+SELECT cid, SUM(Price * amount) AS sum_total
+FROM `orders`
+LEFT JOIN products USING (pid)
+WHERE (sale_date > '2023-01-01')
+GROUP BY cid
+)
+SELECT *
+FROM total_orders
+LEFT JOIN customers USING (cid)
+ORDER BY sum_total DESC
+LIMIT 1
+
+```
+
+*Q1- Answer*
+
+```{r}
+#| echo: false
+Q1
+```
+
+# Q2
+
+```{sql, connection = con_chocolate, output.var = "q2"}
+
+SELECT 
+    sr.Name AS SalesRepName,
+    (SELECT Name FROM customers WHERE cid = (
+        SELECT o.cid 
+        FROM orders o 
+        WHERE o.srid = sr.srid 
+        GROUP BY o.cid 
+        ORDER BY SUM(o.amount) DESC 
+        LIMIT 1
+    )) AS TopCustomerName,
+    (SELECT candy_names FROM products WHERE pid = (
+        SELECT o.pid 
+        FROM orders o 
+        WHERE o.srid = sr.srid 
+        GROUP BY o.pid 
+        ORDER BY SUM(o.amount) DESC 
+        LIMIT 1
+    )) AS TopCandyBarName,
+    sr_sales.TotalSales,
+    sr.year_joined AS year,
+    year_avg.AvgSales AS AvgSales,
+    TotalSales - AvgSales as difference
+FROM 
+    salesreps sr
+JOIN 
+    (SELECT 
+         s.srid,
+         COUNT(*) AS TotalSales,
+         s.year_joined
+     FROM 
+         salesreps s
+     JOIN 
+         orders o ON s.srid = o.srid
+     GROUP BY 
+         s.srid, s.year_joined
+    ) sr_sales ON sr.srid = sr_sales.srid
+JOIN 
+    (SELECT 
+         year_joined, 
+         AVG(TotalSales) AS AvgSales
+     FROM 
+         (SELECT 
+              s.srid, 
+              COUNT(*) AS TotalSales,
+              s.year_joined
+          FROM 
+              salesreps s
+          JOIN 
+              orders o ON s.srid = o.srid
+          GROUP BY 
+              s.srid, s.year_joined
+         )
+     GROUP BY 
+         year_joined
+    ) year_avg ON sr_sales.year_joined = year_avg.year_joined
+WHERE 
+    sr_sales.TotalSales >= year_avg.AvgSales
+ORDER BY 
+    TotalSales - AvgSales DESC  
+ LIMIT 1
+   ;
+
+
+```
+
+*Q2- Answer*
+
+```{r}
+#| echo: false
+q2
+```
